@@ -13,25 +13,38 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class PriceUpdateSerializer(serializers.ModelSerializer):
+    timestamp = serializers.SerializerMethodField()
 
     class Meta:
         model = PriceUpdate
         fields = "__all__"
 
+    def get_timestamp(self, obj):
+        return obj.timestamp.strftime("%B %d, %Y %I:%M:%S %p")
+
 class SaleSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
+    promo = serializers.SerializerMethodField()
     class Meta:
         model = Sale
-        fields = ['id', 'quantity', 'product', 'transaction', 'price']
+        fields = ['id', 'quantity', 'product', 'transaction', 'promo', 'price']
 
     def get_price(self, obj):
-        price = PriceUpdate.objects.filter(product = obj.product, timestamp__lte = obj.transaction.timestamp).first().price
-        return price
-        # print(obj)
-        # return obj.get_price()
+        transaction_date = obj.transaction.timestamp
+        price = PriceUpdate.objects.filter(product = obj.product, timestamp__lte = obj.transaction.timestamp).order_by("-timestamp").first()
+        return price.price
+        
+    def get_promo(self, obj):
+        transaction_date = obj.transaction.timestamp
+        promo = Promo.objects.filter(product = obj.product, startDate__lte = transaction_date, endDate__gte = transaction_date).first()
+        if promo:
+            serializer = PromoSerializer(promo)
+            return serializer.data
+        return None
 
 class TransactionSerializer(serializers.ModelSerializer):
     sales = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = ['id', 'delivery_status', 'timestamp', 'sales']
@@ -41,3 +54,9 @@ class TransactionSerializer(serializers.ModelSerializer):
         serializer = SaleSerializer(sold, many = True)
         return serializer.data
     
+    
+class PromoSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Promo
+        fields = "__all__"

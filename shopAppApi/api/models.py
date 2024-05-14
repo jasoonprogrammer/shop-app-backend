@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.utils.crypto import get_random_string
 from django_resized import ResizedImageField
+import datetime
 # Create your models here.
 def random_sku() -> str:
     while True:
@@ -24,7 +25,7 @@ class Profile(models.Model):
     lastName = models.CharField(max_length = 100)
     birthdate = models.DateField()
     isSeller = models.BooleanField(default = False)
-    dateRegistered = models.DateField(default = timezone.now)
+    dateRegistered = models.DateField(default = datetime.datetime.now)
     phoneNumber = models.CharField(max_length = 11, validators = [phoneValidator])
     emailAddress = models.EmailField()
 
@@ -41,24 +42,40 @@ class Product(models.Model):
     #foreign field so we can add more than 1 product can use the same category
     category = models.ForeignKey(Category, on_delete = models.CASCADE)
 
+    def save(self, *args, **kwargs):
+        #works as a signal, but can detect price change and create new PriceUpdate object
+        old = type(self).objects.get(pk = self.pk) if self.pk else None
+        super(Product, self).save(*args, **kwargs)
+        if old and old.price != self.price:
+            PriceUpdate.objects.create(product = self, price = self.price, timestamp = datetime.datetime.now())
+        elif not old:
+            PriceUpdate.objects.create(product = self, price = self.price, timestamp = datetime.datetime.now())
+
+    def __str__(self):
+        return f"{self.name} - {self.id}"
+
 class PriceUpdate(models.Model):
     # to track the prices, so we dont need to add a price row to other tables that causes redundancy.
     product = models.ForeignKey(Product, on_delete = models.CASCADE)
     price = models.FloatField()
-    timestamp = models.DateTimeField(default = timezone.now)
+    timestamp = models.DateTimeField(default = datetime.datetime.now)
+
+    def __str__(self):
+        return f"{self.price} - {self.timestamp.strftime("%b %d, %Y %I:%M:%S %p")} - {self.product.name} - {self.product.id}"
 
 
 class Tag(models.Model):
-    #foreign key so
     product = models.ForeignKey(Product, on_delete = models.CASCADE)
     name = models.CharField(max_length = 50)
 
 class Transaction(models.Model):
+    ACCEPTED = "ACCEPTED"
     RECEIVED = "RECEIVED"
     IN_TRANSIT = "IN_TRANSIT"
     OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
     CANCELLED = "CANCELLED"
     DELIVERY_STATUS_CHOICES = {
+        ACCEPTED: "Accepted",
         RECEIVED : "Received",
         IN_TRANSIT : "In Transit",
         OUT_FOR_DELIVERY : "Out for Delivery",
@@ -74,8 +91,11 @@ class Transaction(models.Model):
         sale_total = sum([x.total for x in sales])
         return sale_total
 
-    timestamp = models.DateTimeField(default = timezone.now)
-    delivery_status = models.CharField(max_length = 20, choices = DELIVERY_STATUS_CHOICES, default = RECEIVED)
+    timestamp = models.DateTimeField(default = datetime.datetime.now)
+    delivery_status = models.CharField(max_length = 20, choices = DELIVERY_STATUS_CHOICES, default = ACCEPTED)
+
+    def __str__(self):
+        return f"{self.id} - {self.delivery_status} - {self.timestamp.strftime("%b %d, %Y %I:%M:%S %p")}"
 
 class Sale(models.Model):
     
@@ -99,10 +119,11 @@ class ProductAd(models.Model):
 class Cart(models.Model):
     product = models.ForeignKey(Product, on_delete = models.CASCADE)
     quantity = models.IntegerField()
-    added = models.DateTimeField(default = timezone.now)
+    added = models.DateTimeField(default = datetime.datetime.now)
 
 class Promo(models.Model):
+    name = models.TextField()
     product = models.ForeignKey(Product, on_delete = models.CASCADE)
     startDate = models.DateTimeField()
     endDate = models.DateTimeField()
-    newPrice = models.FloatField()
+    discount = models.FloatField()

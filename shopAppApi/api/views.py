@@ -16,6 +16,7 @@ category = Category.objects.first()
 #     with open("test.jpg", "wb") as f:
 #         f.write(r.content)
 #     pr = Product.objects.create(name = d['title'], price = d['price'], image = File(open("test.jpg", "rb")), category = category)
+#     print("Done")
 
 class CategoryCreateAPI(CreateAPIView):
     serializer_class = CategorySerializer
