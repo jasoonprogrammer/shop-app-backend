@@ -1,3 +1,4 @@
+from typing import Collection
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -127,3 +128,21 @@ class Promo(models.Model):
     startDate = models.DateTimeField()
     endDate = models.DateTimeField()
     discount = models.FloatField()
+
+    def full_clean(self, exclude: Collection[str] | None = ..., validate_unique: bool = ..., validate_constraints: bool = ...) -> None:
+        if self.startDate > self.endDate:
+            raise ValidationError("Can't end before starting")
+        else:
+            promos = Promo.objects.filter(product = self.product)
+            #check for promo overlapping
+            for promo in promos:
+                d1 = self
+                d2 = promo
+                if (d1.startDate < d2.startDate < d1.endDate or d2.startDate < d1.startDate < d2.endDate 
+                    and 
+                d1.startDate > d2.endDate > d1.endDate or d2.startDate > d1.endDate > d2.endDate):
+                    raise ValidationError("Promos can't overlap")
+        return super().full_clean(exclude, validate_unique, validate_constraints)
+
+    def __str__(self):
+        return f'{self.name} on {self.product.name[:20]}... : {self.startDate.strftime("%b %d, %Y %I:%M:%S %p")} - {self.endDate.strftime("%b %d, %Y %I:%M:%S %p")}'
